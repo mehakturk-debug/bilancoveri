@@ -1,0 +1,267 @@
+<!DOCTYPE html>
+<html lang="tr">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Teberru Pro | Güvenli Finans Yönetimi</title>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
+    <style>
+        :root {
+            --bg-dark: #0f172a;
+            --sidebar-bg: #1e293b;
+            --accent-blue: #00adb5;
+            --glass-blue: rgba(30, 41, 59, 0.7);
+            --text-white: #f8fafc;
+            --error-red: #f43f5e;
+        }
+
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: 'Inter', 'Segoe UI', sans-serif; }
+        body { background-color: var(--bg-dark); color: var(--text-white); display: flex; height: 100vh; overflow: hidden; }
+
+        /* --- GİRİŞ EKRANI (OVERLAY) --- */
+        #login-screen {
+            position: fixed; top: 0; left: 0; width: 100%; height: 100%;
+            background: var(--bg-dark); z-index: 1000;
+            display: flex; align-items: center; justify-content: center;
+            backdrop-filter: blur(10px);
+        }
+
+        .login-card {
+            background: var(--glass-blue); padding: 40px; border-radius: 20px;
+            border: 1px solid var(--accent-blue); width: 400px; text-align: center;
+            box-shadow: 0 0 30px rgba(0, 173, 181, 0.2);
+        }
+
+        .login-card h2 { color: var(--accent-blue); margin-bottom: 25px; }
+        .login-card input {
+            width: 100%; padding: 12px; margin-bottom: 15px; border-radius: 8px;
+            border: 1px solid #334155; background: #0f172a; color: white;
+        }
+
+        /* --- ANA ARAYÜZ --- */
+        nav { width: 260px; background: var(--sidebar-bg); padding: 25px; display: flex; flex-direction: column; gap: 8px; border-right: 1px solid #334155; }
+        .user-info-box { background: rgba(0,0,0,0.2); padding: 15px; border-radius: 10px; margin-bottom: 20px; border-left: 3px solid var(--accent-blue); }
+        .user-info-box small { color: var(--accent-blue); font-size: 11px; text-transform: uppercase; }
+        .user-info-box div { font-weight: bold; font-size: 14px; margin-top: 4px; }
+
+        .nav-btn { background: transparent; border: none; color: #94a3b8; padding: 12px 15px; text-align: left; cursor: pointer; border-radius: 8px; font-weight: 500; transition: 0.2s; }
+        .nav-btn:hover, .nav-btn.active { background: var(--glass-blue); color: var(--accent-blue); }
+
+        main { flex: 1; padding: 40px; overflow-y: auto; background: radial-gradient(circle at top right, #1e293b, #0f172a); }
+        .tab-content { display: none; animation: fadeIn 0.4s ease; }
+        .tab-content.active { display: block; }
+
+        @keyframes fadeIn { from { opacity: 0; transform: translateY(10px); } to { opacity: 1; transform: translateY(0); } }
+
+        /* Kartlar ve Formlar v7.0 ile aynıdır, modern cam efektleri eklendi */
+        .card { background: var(--glass-blue); padding: 25px; border-radius: 15px; border: 1px solid rgba(255,255,255,0.05); backdrop-filter: blur(10px); }
+        .a4-card { background: white; color: #1e293b; padding: 40px; margin-bottom: 30px; border-radius: 4px; box-shadow: 0 15px 35px rgba(0,0,0,0.4); border-top: 5px solid var(--accent-blue); }
+        
+        button.primary { background: var(--accent-blue); color: white; border: none; padding: 12px; border-radius: 8px; font-weight: bold; cursor: pointer; width: 100%; transition: 0.3s; }
+        button.primary:hover { opacity: 0.8; transform: translateY(-2px); }
+    </style>
+</head>
+<body>
+
+    <div id="login-screen">
+        <div class="login-card">
+            <h2>SİSTEM GİRİŞİ</h2>
+            <input type="text" id="login-mintika" placeholder="Mıntıka Adı">
+            <input type="text" id="login-yurt" placeholder="Yurt Adı">
+            <input type="text" id="login-user" placeholder="Kullanıcı Adı">
+            <input type="password" id="login-pass" placeholder="Şifre">
+            <button class="primary" onclick="handleLogin()">GİRİŞ YAP</button>
+            <p id="login-error" style="color: var(--error-red); margin-top: 15px; font-size: 13px; display: none;">Hatalı şifre veya eksik bilgi!</p>
+        </div>
+    </div>
+
+    <nav>
+        <div class="logo">TEBERRU PRO</div>
+        <div class="user-info-box">
+            <small>Aktif Oturum</small>
+            <div id="display-yurt">-</div>
+            <div id="display-user" style="font-size: 12px; color: #94a3b8;">-</div>
+        </div>
+        <button class="nav-btn active" onclick="showTab('ana', this)">Ana Sayfa</button>
+        <button class="nav-btn" onclick="showTab('gelir', this)">Teberru Kayıt</button>
+        <button class="nav-btn" onclick="showTab('gecmis', this)">Günlük Kayıtlar</button>
+        <button class="nav-btn" onclick="showTab('gider', this)">Gider Kayıt</button>
+        <button class="nav-btn" onclick="showTab('muhasebe', this)">Muhasebe Özeti</button>
+        <button class="nav-btn" style="margin-top: auto; color: #f43f5e;" onclick="logout()">Güvenli Çıkış</button>
+    </nav>
+
+    <main>
+        <div id="ana" class="tab-content active">
+            <h1 style="margin-bottom: 25px;">Sistem Özeti</h1>
+            <div style="display: grid; grid-template-columns: 1fr 1fr; gap: 20px;">
+                <div class="card"><h3>TOPLAM GELİR</h3><p id="dash-gelir">0.00 TL</p></div>
+                <div class="card"><h3>TOPLAM GİDER</h3><p id="dash-gider" style="color: var(--error-red);">0.00 TL</p></div>
+                <div class="card"><h3>KASA MEVCUDU</h3><p id="dash-kasa" style="color: #10b981;">0.00 TL</p></div>
+                <div class="card"><h3>MAKBUZ ADEDİ</h3><p id="dash-adet">0</p></div>
+            </div>
+        </div>
+
+        <div id="gelir" class="tab-content">
+            <div style="max-width: 500px; margin: auto;" class="card">
+                <h2 style="color: var(--accent-blue); margin-bottom: 20px;">Teberru Kaydı</h2>
+                <input type="text" id="gelir-no" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <input type="text" id="gelir-tarih" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <input type="text" id="gelir-isim" placeholder="Yardım Sahibi" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <input type="number" id="gelir-miktar" placeholder="Miktar" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <button class="primary" onclick="addGelir()">KAYDET</button>
+            </div>
+        </div>
+
+        <div id="gecmis" class="tab-content">
+            <div id="history-container"></div>
+        </div>
+
+        <div id="gider" class="tab-content">
+            <div style="max-width: 500px; margin: auto;" class="card">
+                <h2 style="color: #f43f5e; margin-bottom: 20px;">Gider Girişi</h2>
+                <input type="text" id="gider-tarih" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <input type="text" id="gider-aciklama" placeholder="Açıklama" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <input type="number" id="gider-fiyat" placeholder="Tutar" style="width:100%; padding:10px; margin-bottom:10px; background:#0f172a; color:white; border:1px solid #334155;">
+                <button class="primary" style="background:#f43f5e;" onclick="addGider()">GİDERİ KAYDET</button>
+            </div>
+        </div>
+
+        <div id="muhasebe" class="tab-content">
+            <div class="card" style="text-align: center; max-width: 500px; margin: auto;">
+                <h2>KASA ÖZETİ</h2>
+                <p id="muh-kasa" style="font-size: 40px; color: var(--accent-blue); margin: 20px 0;">0.00 TL</p>
+                <button class="primary" onclick="exportExcelAll()">TÜM VERİLERİ YEDEKLE</button>
+            </div>
+        </div>
+    </main>
+
+    <script>
+        // --- GÜVENLİK VE GİRİŞ MANTIĞI ---
+        const MASTER_PASS = "1234"; // Şifreniz burasıdır.
+        
+        function handleLogin() {
+            const mintika = document.getElementById('login-mintika').value;
+            const yurt = document.getElementById('login-yurt').value;
+            const user = document.getElementById('login-user').value;
+            const pass = document.getElementById('login-pass').value;
+
+            if(pass === MASTER_PASS && mintika && yurt && user) {
+                const sessionData = {
+                    mintika, yurt, user,
+                    timestamp: new Date().getTime()
+                };
+                localStorage.setItem('teberru_session', JSON.stringify(sessionData));
+                checkSession();
+            } else {
+                document.getElementById('login-error').style.display = 'block';
+            }
+        }
+
+        function checkSession() {
+            const sessionStr = localStorage.getItem('teberru_session');
+            if(sessionStr) {
+                const session = JSON.parse(sessionStr);
+                const now = new Date().getTime();
+                const birGun = 24 * 60 * 60 * 1000;
+
+                // 24 saat kontrolü
+                if(now - session.timestamp < birGun) {
+                    document.getElementById('login-screen').style.display = 'none';
+                    document.getElementById('display-yurt').innerText = session.yurt;
+                    document.getElementById('display-user').innerText = session.mintika + " / " + session.user;
+                    refresh();
+                } else {
+                    localStorage.removeItem('teberru_session');
+                }
+            }
+        }
+
+        function logout() {
+            localStorage.removeItem('teberru_session');
+            location.reload();
+        }
+
+        // --- VERİ YÖNETİMİ ---
+        let db = JSON.parse(localStorage.getItem('dernek_db')) || { gelirler: [], giderler: [] };
+
+        function save() {
+            localStorage.setItem('dernek_db', JSON.stringify(db));
+            refresh();
+        }
+
+        function showTab(tabId, btn) {
+            document.querySelectorAll('.tab-content').forEach(t => t.classList.remove('active'));
+            document.querySelectorAll('.nav-btn').forEach(b => b.classList.remove('active'));
+            document.getElementById(tabId).classList.add('active');
+            btn.classList.add('active');
+            refresh();
+        }
+
+        function refresh() {
+            const tGelir = db.gelirler.reduce((a, b) => a + b.miktar, 0);
+            const tGider = db.giderler.reduce((a, b) => a + b.fiyat, 0);
+            
+            document.getElementById('dash-gelir').innerText = tGelir.toLocaleString() + ' TL';
+            document.getElementById('dash-gider').innerText = tGider.toLocaleString() + ' TL';
+            document.getElementById('dash-kasa').innerText = (tGelir - tGider).toLocaleString() + ' TL';
+            document.getElementById('muh-kasa').innerText = (tGelir - tGider).toLocaleString() + ' TL';
+            document.getElementById('dash-adet').innerText = db.gelirler.length;
+
+            let lastNo = db.gelirler.length > 0 ? parseInt(db.gelirler[db.gelirler.length-1].no) + 1 : 11050;
+            document.getElementById('gelir-no').value = lastNo;
+            document.getElementById('gelir-tarih').value = new Date().toLocaleDateString('tr-TR');
+            document.getElementById('gider-tarih').value = new Date().toLocaleDateString('tr-TR');
+            renderHistory();
+        }
+
+        function addGelir() {
+            const no = document.getElementById('gelir-no').value;
+            const isim = document.getElementById('gelir-isim').value.toUpperCase();
+            const miktar = parseFloat(document.getElementById('gelir-miktar').value);
+            const tarih = document.getElementById('gelir-tarih').value;
+            if(!isim || !miktar) return alert("Bilgileri doldurun!");
+            db.gelirler.push({ id: Date.now(), no, isim, miktar, tarih });
+            document.getElementById('gelir-isim').value = "";
+            document.getElementById('gelir-miktar').value = "";
+            save();
+        }
+
+        function addGider() {
+            const aciklama = document.getElementById('gider-aciklama').value.toUpperCase();
+            const fiyat = parseFloat(document.getElementById('gider-fiyat').value);
+            const tarih = document.getElementById('gider-tarih').value;
+            if(!aciklama || !fiyat) return alert("Bilgileri doldurun!");
+            db.giderler.push({ id: Date.now(), aciklama, fiyat, tarih });
+            document.getElementById('gider-aciklama').value = "";
+            document.getElementById('gider-fiyat').value = "";
+            save();
+        }
+
+        function renderHistory() {
+            const container = document.getElementById('history-container');
+            container.innerHTML = "";
+            const gunluk = {};
+            db.gelirler.forEach(g => { if(!gunluk[g.tarih]) gunluk[g.tarih] = []; gunluk[g.tarih].push(g); });
+
+            Object.keys(gunluk).reverse().forEach(tarih => {
+                const kayitlar = gunluk[tarih];
+                const card = document.createElement('div');
+                card.className = 'a4-card';
+                let rowsHtml = ''; let toplam = 0;
+                kayitlar.forEach(k => {
+                    toplam += k.miktar;
+                    rowsHtml += `<div style="display:flex; justify-content:space-between; border-bottom:1px solid #eee; padding:5px 0;">
+                        <span>${k.no} | ${k.isim}</span><span><b>${k.miktar.toLocaleString()} TL</b></span>
+                    </div>`;
+                });
+                card.innerHTML = `<h3>TEBERRU ÇİZELGESİ - ${tarih}</h3><hr><br>${rowsHtml}<br>
+                <div style="text-align:right"><b>TOPLAM: ${toplam.toLocaleString()} TL</b></div>`;
+                container.appendChild(card);
+            });
+        }
+
+        window.onload = checkSession;
+    </script>
+</body>
+</html>
