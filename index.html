@@ -3,7 +3,7 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Teberru Pro v11.5 | Bilanço Veri Takibi</title>
+    <title>Teberru Pro v11.6 | Bilanço Veri Takibi</title>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
     <script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js"></script>
     <script src="https://cdn.jsdelivr.net/npm/chart.js"></script>
@@ -57,6 +57,8 @@
         .mono { font-family: 'JetBrains Mono', monospace; }
         .data-item { display: flex; justify-content: space-between; align-items: center; padding: 8px 0; border-bottom: 1px solid rgba(255,255,255,0.05); font-size: 13px; }
         .action-btn { background: rgba(255,255,255,0.1); border: none; color: white; padding: 4px 8px; border-radius: 5px; cursor: pointer; font-size: 11px; margin-left: 5px; }
+        .btn-edit { color: var(--accent-blue); }
+        .btn-delete { color: var(--error-red); }
 
         #auth-screen { position: fixed; inset: 0; background: var(--bg-dark); z-index: 5000; display: flex; align-items: center; justify-content: center; }
         #modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); z-index: 9000; display: none; align-items: center; justify-content: center; }
@@ -161,14 +163,14 @@
 
     <script>
         // --- DATABASE & SESSION ---
-        let db = JSON.parse(localStorage.getItem('dernek_v11_5_db')) || { 
+        let db = JSON.parse(localStorage.getItem('dernek_v11_6_db')) || { 
             users: [{mintika: "GENEL", yurt: "admin", pass: "admin123", role: "admin"}], 
             gelirler: [], giderler: [], makbuzlar: [] 
         };
         let isLogin = true;
         let trendChart, pieChart;
 
-        function saveDB() { localStorage.setItem('dernek_v11_5_db', JSON.stringify(db)); }
+        function saveDB() { localStorage.setItem('dernek_v11_6_db', JSON.stringify(db)); }
 
         // --- AKILLI OTURUM (24 SAAT) ---
         function checkAutoLogin() {
@@ -226,20 +228,26 @@
             refresh();
         }
 
-        // --- VERİ FİLTRELEME MOTORU (TAMİR EDİLDİ) ---
         function getMyData(type) {
             const u = JSON.parse(sessionStorage.getItem('active_user'));
             if(!u) return [];
-            // Admin her şeyi, normal kullanıcı sadece kendi verisini görür
             return u.role === "admin" ? db[type] : db[type].filter(x => x.owner === u.yurt);
         }
 
         function refresh() {
             updateDash(); renderCharts(); renderMakbuzlar(); renderHistory();
             document.getElementById('gelir-tarih').value = new Date().toLocaleDateString('tr-TR');
-            const myGelirler = getMyData('gelirler');
-            if(!document.getElementById('gelir-no').value) {
-                document.getElementById('gelir-no').value = myGelirler.length > 0 ? parseInt(myGelirler[myGelirler.length-1].no) + 1 : 11050;
+            
+            const u = JSON.parse(sessionStorage.getItem('active_user'));
+            if(u && u.role !== "admin") {
+                const myGelirler = getMyData('gelirler');
+                // Makbuz artış mantığı: Son kaydın numarasını al ve 1 ekle
+                if(myGelirler.length > 0) {
+                    const lastNo = parseInt(myGelirler[myGelirler.length-1].no);
+                    document.getElementById('gelir-no').value = lastNo + 1;
+                } else {
+                    document.getElementById('gelir-no').value = 11050; // Başlangıç varsayılanı
+                }
             }
         }
 
@@ -269,7 +277,16 @@
                     <h3 style="color:var(--accent-blue)">📅 ${t}</h3>
                     <div style="margin:10px 0; font-size:13px;">Toplam: <b style="color:var(--success-green)">${s.toLocaleString()} TL</b></div>
                     <div class="card-details">
-                        ${dayRs.map(r => `<div class="data-item"><span>${r.no}|${r.isim} ${u.role==='admin' ? '<small>('+r.owner+')</small>' : ''}</span> <b>${r.miktar} TL</b></div>`).join('')}
+                        ${dayRs.map(r => `
+                            <div class="data-item">
+                                <span>${r.no}|${r.isim} ${u.role==='admin' ? '<small>('+r.owner+')</small>' : ''}</span>
+                                <div>
+                                    <b>${r.miktar} TL</b>
+                                    <button class="action-btn btn-edit" onclick="event.stopPropagation(); editRec('${r.id}')">✏️</button>
+                                    <button class="action-btn btn-delete" onclick="event.stopPropagation(); deleteRec('${r.id}')">🗑️</button>
+                                </div>
+                            </div>`).join('')}
+                        <button class="primary-btn" style="font-size:11px; margin-top:15px; padding:8px;" onclick="event.stopPropagation(); exportFiş('${t}')">📥 EXCEL FİŞİ</button>
                     </div>
                 </div>`;
             });
@@ -279,18 +296,46 @@
             const grid = document.getElementById('makbuz-grid'); grid.innerHTML = "";
             const ms = getMyData('makbuzlar');
             ms.forEach(m => {
-                const rs = db.gelirler.filter(g => parseInt(g.no) >= m.bas && parseInt(g.no) <= m.bit && g.owner === m.owner);
                 const u = JSON.parse(sessionStorage.getItem('active_user'));
                 grid.innerHTML += `<div class="glass-card"><h3>Koçan: ${m.no}</h3><small>${m.bas}-${m.bit} | ${m.sorumlu} ${u.role==='admin' ? '['+m.owner+']' : ''}</small></div>`;
             });
         }
 
-        // --- DİĞER FONKSİYONLAR ---
+        // --- YENİ EKLENEN YÖNETİM FONKSİYONLARI ---
+        function deleteRec(id) {
+            if(confirm("Bu teberru kaydını kalıcı olarak silmek istediğinize emin misiniz?")) {
+                db.gelirler = db.gelirler.filter(x => x.id !== id);
+                saveDB(); refresh();
+            }
+        }
+
+        function editRec(id) {
+            const r = db.gelirler.find(x => x.id === id);
+            const nV = prompt("Yeni tutarı giriniz:", r.miktar);
+            const nI = prompt("İsim düzenle:", r.isim);
+            if(nV !== null && nI !== null) {
+                r.miktar = parseFloat(nV);
+                r.isim = nI.toUpperCase();
+                saveDB(); refresh();
+            }
+        }
+
         function addGelir() {
             const u = JSON.parse(sessionStorage.getItem('active_user'));
-            const d = { id: Date.now().toString(), owner: u.yurt, no: document.getElementById('gelir-no').value, tarih: document.getElementById('gelir-tarih').value, isim: document.getElementById('gelir-isim').value.toUpperCase(), miktar: parseFloat(document.getElementById('gelir-miktar').value) };
-            db.gelirler.push(d); saveDB(); refresh();
-            document.getElementById('gelir-isim').value = ""; document.getElementById('gelir-miktar').value = "";
+            const d = { 
+                id: Date.now().toString(), 
+                owner: u.yurt, 
+                no: document.getElementById('gelir-no').value, 
+                tarih: document.getElementById('gelir-tarih').value, 
+                isim: document.getElementById('gelir-isim').value.toUpperCase(), 
+                miktar: parseFloat(document.getElementById('gelir-miktar').value) 
+            };
+            db.gelirler.push(d); 
+            saveDB(); 
+            // Formu temizle ve makbuz no'yu 1 artır
+            document.getElementById('gelir-isim').value = ""; 
+            document.getElementById('gelir-miktar').value = "";
+            refresh();
         }
 
         function addGider() {
@@ -322,6 +367,16 @@
             const u = JSON.parse(sessionStorage.getItem('active_user'));
             db.makbuzlar.push({ owner: u.yurt, no: document.getElementById('m-no').value, bas: parseInt(document.getElementById('m-bas').value), bit: parseInt(document.getElementById('m-bit').value), sorumlu: document.getElementById('m-sor').value }); 
             saveDB(); refresh(); closeModal(); 
+        }
+
+        function exportFiş(t) {
+            const rs = db.gelirler.filter(g => g.tarih === t);
+            const rows = [];
+            rs.forEach(r => {
+                rows.push({ Kod:'600.01', Hesap:'DERNEK NAKİT BAĞIŞLAR', 'Belge No':r.no, 'Belge Tar':r.tarih, Açıklama:r.isim, Borç:0, Alacak:r.miktar });
+                rows.push({ Kod:'100.01', Hesap:'NAKİT KASA', 'Belge No':r.no, 'Belge Tar':r.tarih, Açıklama:r.isim, Borç:r.miktar, Alacak:0 });
+            });
+            XLSX.writeFile({ SheetNames: ["Fis"], Sheets: { "Fis": XLSX.utils.json_to_sheet(rows) } }, `Fis_${t}.xlsx`);
         }
 
         window.onload = () => { if(!checkAutoLogin()) document.getElementById('auth-screen').style.display = 'flex'; }
